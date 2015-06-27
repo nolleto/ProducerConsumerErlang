@@ -1,87 +1,78 @@
 -module (app).
--export ([init/0,doit/0,test/0]).
+-export ([init/0,test/1]).
 -import (producer, [wakeUpTheBrewer/3]).
 -import (consumer, [inviteDrunkGuy/3]).
 -import (brewery, [createCaseOfBeer/1]).
+-import (filehelper, [create_file/1,print_line/2]).
 
-test() ->
-	io:format("Oi!!!"),
-	timer:sleep(2000),
-	io:format("\r"),
-	test().
-
-doit() ->
-	FileName = '\\console.txt',
-	case file:read_file_info(FileName) of
-			{ok, FileInfo} ->
-								file:write_file(FileName, "Abhimanyu", [append]);
-			{error, enoent} ->
-								% File doesn't exist
-								donothing
-	end.
+test(N) -> filehelper:create_file(N).
 
 init() ->
 	Self = self(),
+	Id = 1,
 	B = brewery:createCaseOfBeer(Self),
-	producer:wakeUpTheBrewer(1, B, Self),
-	consumer:inviteDrunkGuy(1, B, Self),
-	loop(B, 1, 1).
+	hireBrewer(Id, B),
+	inviteGuy(Id, B),
+	loop(B, Id, Id).
 
 loop(B, ProducerId, GuyId) ->
 	receive
+		{ M, message } ->
+			printSomething(M),
+			loop(B, ProducerId, GuyId);
+
 		[ Phrase | Args ] ->
 			printSomething(Phrase, Args),
 			loop(B, ProducerId, GuyId);
 
-		{ Id, guyDead } ->
-			Main = self(),
-			printSomething("Guy ~p is dead! Inviting other guy", [Id]),
+		{ guyDead } ->
 			NewGuyId = GuyId + 1,
-			spawn(fun() -> inviteGuy(NewGuyId, B, Main) end),
-			loop(B, ProducerId, NewGuyId);
+			SuperNewGuyId = NewGuyId + 1,
+			inviteGuy(NewGuyId, B),
+			inviteGuy(SuperNewGuyId, B),
+			loop(B, ProducerId, SuperNewGuyId);
 
-		{ Id, brewerDead } ->
-			Main = self(),
+		{ brewerDead } ->
 			NewProducerId = ProducerId + 1,
-			printSomething("Brewer ~p is dead! Hiring other slav... I mean Brewer", [Id]),
-			hireBrewer(NewProducerId, B, Main),
+			hireBrewer(NewProducerId, B),
 			loop(B, NewProducerId, GuyId);
 
-		{ Id, brewerIdle } ->
+		{ brewerIdle } ->
 			loop(B, ProducerId, GuyId);
 
-		{ Id, guyThirsty } ->
+		{ guyThirsty } ->
 			NewProducerId = ProducerId + 1,
-			SuperNewProducerId = NewProducerId + 1,
-			hireBrewer(NewProducerId, B, self()),
-			hireBrewer(SuperNewProducerId, B, self()),
-			loop(B, SuperNewProducerId, GuyId);
+			hireBrewer(NewProducerId, B),
+			loop(B, NewProducerId, GuyId);
 
-		{ Id, inviteGuy } ->
+		{ inviteGuy } ->
 			Main = self(),
 			NewGuyId = GuyId + 1,
-			spawn(fun() -> inviteGuy(NewGuyId, B, Main) end),
+			inviteGuy(NewGuyId, B),
 			loop(B, ProducerId, NewGuyId)
 
 	end.
+
+printSomething(M) ->
+	io:nl(),
+	io:format(M).
 
 printSomething(P, A) ->
 	io:nl(),
 	io:format(P, A).
 
-hireBrewer(Id, B, Main) ->
-	producer:wakeUpTheBrewer(Id, B, Main).
+hireBrewer(Id, B) ->
+	producer:wakeUpTheBrewer(Id, B, self()).
 
-inviteGuy(Id, B, Main) ->
-	timer:sleep(2000),
-	consumer:inviteDrunkGuy(Id, B, Main).
+inviteGuy(Id, B) ->
+	consumer:inviteDrunkGuy(Id, B, self()).
 
 
-% cd('C:\\ErlangProblema').
-% c(app).
-% app:init().
-% c(brewery).
-% P = brewery:wakeUpTheBrewer().
+% cd('C:\\ProducerConsumerErlang').
+% c(str).
 % c(producer).
 % c(consumer).
 % c(brewery).
+% c(filehelper).
+% c(app).
+% app:init().

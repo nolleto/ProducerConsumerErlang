@@ -1,48 +1,61 @@
 -module (producer).
 -export ([wakeUpTheBrewer/3]).
+-import (filehelper, [create_file/2,print_line/2]).
+-import (str, [to_string/1]).
 
-wakeUpTheBrewer(Id, Pid, Main) -> spawn(fun() -> newSlave(Id, Pid, Main) end).
+wakeUpTheBrewer(Id, Brewery, App) -> spawn(fun() -> newSlave(Id, Brewery, App) end).
 
-newSlave(Id, Pid, Main) ->
-	Main ! ["A slave Brewer 'HIRED'"],
-	needCreateBeer(Id, Pid, Main, 0, 0).
+newSlave(Id, Brewery, App) ->
+	File = filehelper:create_file(self(), Id),
+	changeStatus(Id, App, File, "'HIRED'"),
+	needCreateBeer(Id, Brewery, App, File, 0, 0).
 
-needCreateBeer(Id, Pid, Main, Beers, Idle) ->
+needCreateBeer(Id, Brewery, App, File, Beers, Idle) ->
 	Pacience = 1000,
-	Pid ! {self(), isFull},
+	Brewery ! {self(), isFull},
 	receive
-		true -> 
-			Main ! ["Slave Brewer ~p is smoking", Id],
+		true ->
+			%changeStatus(Id, App, File, "is smoking"),
 			timer:sleep(Pacience),
 			if
-				Idle >= 4 -> alertIdle(Id, Main);
+				Idle >= 4 -> alertIdle(Id, App);
 				Idle < 4 -> doNothing
 			end,
-			needCreateBeer(Id, Pid, Main, Beers, Idle + 1);
+			needCreateBeer(Id, Brewery, App, File, Beers, Idle + 1);
 
-		false -> createBeer(Id, Pid, Main, Beers)
+		false -> createBeer(Id, Brewery, App, File, Beers)
 	end.
 
-createBeer(Id, Pid, Main, Beers) ->
+createBeer(Id, Brewery, App, File, Beers) ->
 	timer:sleep(5000),
-	if 
+	if
 		Beers >= 15 ->
-			Main ! { Id, brewerDead };
+			alertDead(Id, App, File);
 
 		Beers < 15 ->
-			Pid ! {self(), add},
+			Brewery ! {self(), add},
 			receive
-				{From, true} -> 
-					Main ! ["Slave Brewer ~p created a beer (~p)", Id, Beers + 1],
-					needCreateBeer(Id, From, Main, Beers + 1, 0);
+				{From, true, Beer} ->
+					changeStatus(Id, App, File, "created " ++ Beer),
+					needCreateBeer(Id, From, App, File, Beers + 1, 0);
 
 				{From, full} ->
-					Main ! ["Slave Brewer ~p say 'the box of beer is full! Can a have some rest?'", Id],
-					needCreateBeer(Id, From, Main, Beers, 0)
+					%changeStatus(Id, App, File, "say 'the box of beer is full! Can a have some rest?'"),
+					needCreateBeer(Id, From, App, File, Beers, 0)
 
 			end
 	end.
 
-alertIdle(Id, Main) -> 
-	Main ! ["Slave Brewer ~p say 'finaly a can rest =)'", Id],
-	Main ! {Id, brewerIdle}.
+changeStatus(Id, App, File, Status) ->
+	NewId = str:to_string(Id),
+	Message =  "Slave Brewer " ++ NewId ++ " -> " ++ Status,
+	filehelper:print_line(File, Message),
+	App ! { Message, message }.
+
+alertDead(Id, App, File) ->
+	changeStatus(Id, App, File, "dead"),
+	App ! { brewerDead }.
+
+alertIdle(Id, App) ->
+	%App ! ["Slave Brewer ~p say 'finaly a can rest =)'", Id],
+	App ! {Id, brewerIdle}.

@@ -1,61 +1,73 @@
 -module (consumer).
 -export ([inviteDrunkGuy/3]).
+-import (filehelper, [create_file/2,print_line/2]).
+-import (str, [to_string/1]).
 
-inviteDrunkGuy(Id, Pid, Main) -> spawn(fun() -> newGuy(Id, Pid, Main) end).
+inviteDrunkGuy(Id, Brewery, App) -> spawn(fun() -> newGuy(Id, Brewery, App) end).
 
-newGuy(Id, Pid, Main) ->
-	Main ! ["A drunk guy enter in the party"],
-	canIDrink(Id, Pid, Main, 0, 0).
+newGuy(Id, Brewery, App) ->
+	File = filehelper:create_file(self(), Id),
+	changeStatus(Id, App, File, "enter in the party"),
+	timer:sleep(10000),
+	canIDrink(Id, Brewery, App, File, 0).
 
-canIDrink(Id, Pid, Main, Drinks, Thirsty) ->
+canIDrink(Id, Brewery, App, File, Drinks) ->
 	Pacience = 5000,
-	Pid ! {self(), isEmpty},
+	Brewery ! {self(), isEmpty},
 	receive
-		true -> 
-			Main ! ["Guy ~p want a beer but doens't have any!", Id],
+		true ->
+			changeStatus(Id, App, File, "want a beer but doens't have any!"),
+			alertThirsty(App),
 			timer:sleep(Pacience),
-			if
-				Thirsty >= 1 -> alertThirsty(Id, Main);
-				Thirsty < 1 ->	doNothing
-			end,
-			canIDrink(Id, Pid, Main, Drinks, Thirsty + 1);
+			canIDrink(Id, Brewery, App, File, Drinks);
 
-		false -> drink(Id, Pid, Main, Drinks)
+		false -> drink(Id, Brewery, App, File, Drinks)
 	end.
 
 
-drink(Id, Pid, Main, Drinks) ->
+drink(Id, Brewery, App, File, Drinks) ->
 	timer:sleep(1000),
 	if
 		Drinks >= 10 ->
-			Main ! { Id, guyDead };
+			alertDead(Id, App, File);
 
 		Drinks < 10 ->
-			Pid ! {self(), remove},
+			Brewery ! {self(), remove},
 			receive
-				{From, true} when Drinks == 5 -> 
-					Main ! ["Guy ~p is really drank  (~p)", Id, Drinks + 1],
-					%inviteFriend(Id, Main),
-					canIDrink(Id, From, Main, Drinks + 1, 0);
+				{From, true, Beer} when Drinks == 5 ->
+					drinking(),
+					changeStatus(Id, App, File, "drink " ++ Beer ++ " and is really drank"),
+					canIDrink(Id, From, App, File, Drinks + 1);
 
-				{From, true} when Drinks == 8 -> 
-					Main ! ["Guy ~p must stop  (~p)", Id, Drinks + 1],
-					canIDrink(Id, From, Main, Drinks + 1, 0);
+				{From, true, Beer} when Drinks == 8 ->
+					drinking(),
+					changeStatus(Id, App, File, "drink " ++ Beer ++ " and must stop"),
+					canIDrink(Id, From, App, File, Drinks + 1);
 
-				{From, true} -> 
-					Main ! ["Guy ~p drank a beer  (~p)", Id, Drinks + 1],
-					canIDrink(Id, From, Main, Drinks + 1, 0);
+				{From, true, Beer} ->
+					drinking(),
+					changeStatus(Id, App, File, "drink " ++ Beer),
+					canIDrink(Id, From, App, File, Drinks + 1);
 
 				{From, empty} ->
-					Main ! ["Guy ~p NEED some beer! =(", Id],
-					canIDrink(Id, From, Main, Drinks, 0)
+					changeStatus(Id, App, File, "NEED some beer! =("),
+					canIDrink(Id, From, App, File, Drinks)
 
 			end
 	end.
 
-alertThirsty(Id, Main) -> 
-	Main ! ["Guy ~p NEED some beer! =(", Id],
-	Main ! {Id, guyThirsty}.
+drinking() ->
+	timer:sleep(2000).
 
-inviteFriend(Id, Main) -> 
-	Main ! {Id, inviteGuy}.
+changeStatus(Id, App, File, Status) ->
+	NewId = str:to_string(Id),
+	Message =  "Drunk guy " ++ NewId ++ " -> " ++ Status,
+	filehelper:print_line(File, Message),
+	App ! { Message, message }.
+
+alertThirsty(App) ->
+	App ! { guyThirsty }.
+
+alertDead(Id, App, File) ->
+	changeStatus(Id, App, File, "dead =("),
+	App ! { guyDead }.

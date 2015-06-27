@@ -1,5 +1,6 @@
 -module(filehelper).
--export([print_list/1,create_file/1,print_line/2]).
+-export([print_list/1,create_file/2,print_line/2]).
+-import (str, [to_string/1]).
 
 print_list(List) ->
   Filename = "log.txt",
@@ -12,33 +13,30 @@ print_list(List) ->
       Msg
   end.
 
-create_file(Id) ->
-  Filename = "\\log\\process_" ++ Id ++ ".txt",
+create_file(From, Id) ->
+  NewId = str:to_string(Id),
+  Filename = "process_" ++ NewId ++ " (" ++ getProcessName(From) ++ ").txt",
   case file:open(Filename, [write]) of
-    {ok, Device} -> Device;
+    {ok, Device} ->
+      delete_content(Device),
+      Device;
+
     {error, Msg} -> Msg
   end.
 
 print_line(Device, Message) -> print(Device, [Message]).
 
-print(Id, Content) ->
-  Filename = "\\log\\process_" ++ id ++ ".txt",
-  case file:open(Filename, [write, append]) of
-    {ok, Device} ->
-      delete_content(Device),
-      print(Device, List),
-      Device;
-
-    {error, Msg} ->
-      Msg
-  end.
-
 delete_content(Device) ->
   file:truncate(Device).
 
 print(Device, [H|T]) ->
-  file:write(Device, H ++ "\n"),
+  file:write(Device, H),
   print(Device, T);
 
 print(Device, []) ->
   file:write(Device, "\n").
+
+getProcessName(P) ->
+  S = str:to_string(P),
+  T = re:replace(S, "<", "", [global, {return, list}]),
+  re:replace(T, ">", "", [global, {return, list}]).
