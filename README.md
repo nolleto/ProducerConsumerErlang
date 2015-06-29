@@ -10,7 +10,7 @@ Well, is my first project using Erlang so is probably a little bad (or a shit).
 To run this 'application' you must go to directory of this project, compile all files and run app.erl, something like this:
 
 ```
-pwd([YourDirectory]).
+cd([YourDirectory]).
 c(brewery).
 c(consumer).
 c(filehelper).
